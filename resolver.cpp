@@ -5,13 +5,6 @@
 
 using asio::ip::tcp;
 
-std::string make_daytime_string()
-{
-  using namespace std; // For time_t, time and ctime;
-  time_t now = time(0);
-  return ctime(&now);
-}
-
 int main()
 {
   try
@@ -27,7 +20,8 @@ int main()
       std::error_code ignored_error;
       size_t len = socket.read_some(asio::buffer(message), ignored_error);
       std::cout << len << '\n';
-      std::cout.write(&message[0], 12);
+      std::string id(&message[0], &message[0] + 2);
+      std::cout << id;
       std::cout << '\n';
     }
   }
