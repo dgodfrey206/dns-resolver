@@ -6,30 +6,25 @@
 using asio::ip::tcp;
 using asio::ip::udp;
 
-#pragma pack(push, 1)
-struct packet {
-	// 12 byte header
-        uint16_t trans_id = 5151;
-        uint16_t flags = 1 << 15;
-	uint16_t question_count = 1;
-	uint16_t answer_count = 0;
-	uint16_t authority_count = 0;
-	uint16_t additional_count = 0;
-	// ^ end of header
-	// Question entries
-	char question_name[20] = "6google3com0";
-	int questionType = 0x01; // Return A record
-	int question_class = 0x0001;
-};
-#pragma pack(pop)
-
 void send_packet(udp::socket& socket, udp::endpoint& endpoint) {
-	packet pkt;
-	asio::const_buffer buffer = asio::buffer(&pkt, sizeof(pkt));
+	std::vector<std::uint8_t> buf = {
+		0x14, 0x1F, // 5151
+		1 << 7, 0,
+		0x0, 0x01,
+		0x0, 0x0,
+		0x0, 0x0,
+		0x0, 0x0,
+		0x6, 'g', 'o', 'o', 'g', 'l', 'e',
+		0x3, 'c', 'o', 'm',
+		0x0,
+		0x0, 0x01,
+		0x0, 0x01
+	};
+	asio::const_buffer buffer = asio::buffer(buf);
 	auto len = socket.send_to(buffer, endpoint);
 
 	if (len) {
-		std::cout << "Successful\n";
+		std::cout << "Successfully sent " << len << " bytes\n";
 	} else {
 		std::cerr << "Failed to send packet\n";
 	}
