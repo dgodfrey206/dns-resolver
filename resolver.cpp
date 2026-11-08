@@ -15,8 +15,8 @@ uint16_t generate_transaction_id() {
 }
 
 std::string truncate_qname(std::vector<std::string> const& domain_parts) {
-	uint8_t i = domain_parts.last().size();
-	return std::to_string(i) + domain_parts.last();
+	uint8_t i = domain_parts.back().size();
+	return std::to_string(i) + domain_parts.back();
 }
 
 #pragma pack(push, 1)
@@ -74,10 +74,10 @@ int main()
 	messenger.connect(endpoint);
 
 	auto truncated = truncate_qname(domain_parts);
-	asio::write(messenger, asio::buffer(&packet), ignored_error);
+	asio::write(messenger, asio::buffer(&response, sizeof(packet)), ignored_error);
 	asio::write(messenger, asio::buffer(truncated), ignored_error);
-	asio::write(messenger, asio::buffer(&question_type), ignored_error);
-	asio::write(messenger, asio::buffer(&question_class), ignored_error);
+	asio::write(messenger, asio::buffer(&question_type, sizeof question_type), ignored_error);
+	asio::write(messenger, asio::buffer(&question_class, sizeof question_class), ignored_error);
       }
     }
   }
