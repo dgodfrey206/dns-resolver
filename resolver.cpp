@@ -30,12 +30,68 @@ struct packet {
 };
 #pragma pack(pop)
 
+class dns_resolver {
+public:
+    dns_resolver(asio::io_context& io_context, uint16_t port)
+        : socket_(io_context, asio::ip::udp::endpoint(asio::ip::udp::v4(), port))
+    {
+        start_receive();
+    }
+
+private:
+    void start_receive() {
+        // Allocate a fresh buffer for the incoming message
+        // 512 bytes is standard for basic UDP DNS, or 4096 for EDNS0
+        auto buffer = std::make_shared<std::vector<uint8_t>>(4096);
+        auto remote_endpoint = std::make_shared<asio::ip::udp::endpoint>();
+
+        // Register the async read operation
+        socket_.async_receive_from(
+            asio::buffer(*buffer), *remote_endpoint,
+            [this, buffer, remote_endpoint](const asio::error_code& error, size_t bytes_transferred) {
+                if (socket_.is_open()) {
+                    start_receive();
+                }
+
+                if (!error && bytes_transferred > 0) {
+                    handle_packet(buffer, bytes_transferred, *remote_endpoint);
+                } else {
+                    std::cerr << "Receive error: " << error.message() << "\n";
+                }
+            });
+    }
+
+    void handle_packet(std::shared_ptr<std::vector<uint8_t>> buffer,
+                       size_t length,
+                       const asio::ip::udp::endpoint& client_endpoint) {
+        std::cout << "Received " << length << " bytes from " << client_endpoint << "\n";
+
+        // Your DNS parsing/forwarding logic goes here...
+    }
+
+    uint16_t generate_transaction_id() {
+        std::random_device rd{};
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<uint16_t> distrib(0, 65535);
+        return distrib(gen);
+    }
+
+    std::string truncate_qname(std::vector<std::string> const& domain_parts) {
+        uint8_t i = domain_parts.back().size();
+        return std::to_string(i) + domain_parts.back();
+    }
+
+    asio::ip::udp::socket socket_;
+};
+
 int main()
 {
   using namespace std;
   try
   {
     asio::io_context io_context;
+    dns_resolver dns(io_context, 8080);
+    /*
     tcp::acceptor acceptor(io_context, tcp::endpoint(tcp::v4(), 8080));
     packet response{};
     //for (;;)
@@ -79,7 +135,8 @@ int main()
 	asio::write(messenger, asio::buffer(&question_type, sizeof question_type), ignored_error);
 	asio::write(messenger, asio::buffer(&question_class, sizeof question_class), ignored_error);
       }
-    }
+    }*/
+    io_context.run();
   }
   catch (std::exception& e) {
     std::cerr << "Exception message: " << e.what() << std::endl;
