@@ -7,15 +7,18 @@ using asio::ip::tcp;
 
 #pragma pack(push, 1)
 struct packet {
-        uint16_t trans_id = 0x345d;
-        uint16_t flags = 1 << 9;
-        uint16_t num_q = 1;
-        uint16_t num_ansrr = 0;
-        uint16_t num_authrr = 0;
-	uint16_t num_addrr = 0;
-	char name[28] = "0x03www0x06google0x03com0x0";
-	int questionType = 0x01;
-	int questionClass = 0x0001;
+	// 12 byte header
+        uint16_t trans_id = 5151;
+        uint16_t flags = 1 << 15;
+	uint16_t question_count = 1;
+	uint16_t answer_count = 0;
+	uint16_t authority_count = 0;
+	uint16_t additional_count = 0;
+	// ^ end of header
+	// Question entries
+	char question_name[20] = "6google3com0";
+	int questionType = 0x01; // Return A record
+	int question_class = 0x0001;
 };
 #pragma pack(pop)
 
@@ -26,7 +29,7 @@ void send_packet(tcp::socket& socket) {
 	asio::write(socket, buffer, ec);
 
 	if (!ec) {
-		std::cout << "Successful";
+		std::cout << "Successful\n";
 	} else {
 		std::cerr << "Failed to send packet: " << ec.message() << '\n';
 	}
