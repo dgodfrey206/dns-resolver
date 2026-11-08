@@ -4,6 +4,7 @@
 #include <cstdint>
 
 using asio::ip::tcp;
+using asio::ip::udp;
 
 #pragma pack(push, 1)
 struct packet {
@@ -22,16 +23,15 @@ struct packet {
 };
 #pragma pack(pop)
 
-void send_packet(tcp::socket& socket) {
+void send_packet(udp::socket& socket, udp::endpoint& endpoint) {
 	packet pkt;
 	asio::const_buffer buffer = asio::buffer(&pkt, sizeof(pkt));
-	asio::error_code ec;
-	asio::write(socket, buffer, ec);
+	auto len = socket.send_to(buffer, endpoint);
 
-	if (!ec) {
+	if (len) {
 		std::cout << "Successful\n";
 	} else {
-		std::cerr << "Failed to send packet: " << ec.message() << '\n';
+		std::cerr << "Failed to send packet\n";
 	}
 }
 
@@ -39,11 +39,11 @@ int main(int argc, char* argv[]) {
   try {
 	asio::io_context io_context;
 
-	tcp::endpoint endpoint(asio::ip::address::from_string("127.0.0.1"), 8080);
-	tcp::socket socket(io_context);
-	socket.connect(endpoint);
+	udp::endpoint endpoint(asio::ip::address::from_string("127.0.0.1"), 8080);
+	udp::socket socket(io_context);
+	socket.open(asio::ip::udp::v4());
 
-	send_packet(socket);
+	send_packet(socket, endpoint);
   } catch (std::exception& e) {
 	std::cerr << "Exception: " << e.what();
   }
