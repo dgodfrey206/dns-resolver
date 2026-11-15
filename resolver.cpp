@@ -7,28 +7,15 @@
 using namespace std;
 using asio::ip::tcp;
 
-uint16_t generate_transaction_id() {
-    std::random_device rd{};
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<uint16_t> distrib(0, 65535);
-    return distrib(gen);
-}
-
-std::string truncate_qname(std::vector<std::string> const& domain_parts) {
-	uint8_t i = domain_parts.back().size();
-	return std::to_string(i) + domain_parts.back();
-}
-
-#pragma pack(push, 1)
-struct packet {
-        uint16_t trans_id;
-        uint16_t flags;
-        uint16_t question_count;
-        uint16_t answer_count;
-        uint16_t authority_count;
-        uint16_t additional_count;
+enum class LookupState {
+    AWAITING_ROOT_RESPONSE,
+    AWAITING_TLD_RESPONSE,
+	AWAITING_AUTH_RESPONSE
 };
-#pragma pack(pop)
+
+using Buffer = std::vector<std::uint8_t>;
+
+inline constexpr auto HEADER_BLOCK_SIZE = 12;
 
 class dns_resolver {
 public:
@@ -40,12 +27,9 @@ public:
 
 private:
     void start_receive() {
-        // Allocate a fresh buffer for the incoming message
-        // 512 bytes is standard for basic UDP DNS, or 4096 for EDNS0
         auto buffer = std::make_shared<std::vector<uint8_t>>(4096);
         auto remote_endpoint = std::make_shared<asio::ip::udp::endpoint>();
 
-        // Register the async read operation
         socket_.async_receive_from(
             asio::buffer(*buffer), *remote_endpoint,
             [this, buffer, remote_endpoint](const asio::error_code& error, size_t bytes_transferred) {
@@ -66,22 +50,75 @@ private:
                        const asio::ip::udp::endpoint& client_endpoint) {
         std::cout << "Received " << length << " bytes from " << client_endpoint << "\n";
 
-        // Your DNS parsing/forwarding logic goes here...
+        uint16_t trans_id = ((*buffer)[0] << 7) | (*buffer)[1];
+
+        if (record.find(trans_id) == record.end()) {
+            std::vector<std::uint8_t> top_level_domain;
+            int start = 12, i = start, prev;
+            for (; i < buffer->size() && (*buffer)[i] != 0; i++) {
+                prev = i;
+                i += (*buffer)[i];
+            }
+
+            if (!(i < buffer->size())) {
+                // something went wrong
+                std::cerr << "Something went wrong\n";
+                return;
+            }
+
+            record[trans_id].status = { LookupState::AWAITING_ROOT_RESPONSE, {buffer->data() + start, buffer->data() + i} };
+            top_level_domain.assign(buffer->data() + prev + 1, buffer->data() + prev + 1 + (*buffer)[prev]);
+
+            // send packet to root nameserver
+    /*
+            std::vector<std::uint8_t> response_buf = {
+                        tid(), tid(),
+                        0x0, 0x0,
+                        0x0, 0x0,
+                        0x0, 0x0,
+                        0x0, 0x0,
+                        0x0, 0x0,
+                static_cast<std::uint8_t>(str.size())
+                };
+
+            for (int i = 0; i < str.size(); i++) response_buf.push_back(str[i]);
+            for (int x : {0x0, 0x01, 0x0, 0x01}) response_buf.push_back(x);*/
+	    }
+
     }
 
-    uint16_t generate_transaction_id() {
+    Buffer::const_iterator skip_record(Buffer::const_iterator it, int type) {
+        /*
+          type == 1 header
+          type == 2 question
+          type == 3 resource record
+        */
+        if (type == 1) {
+            return it + HEADER_BLOCK_SIZE; // skip header
+        }
+        if (type == 2) {
+            for (; it != Buffer::const_iterator{} && *it != 0; it++) {
+                it += *it;
+            }
+            return it;
+        }
+
+    }
+
+    uint8_t tid() {
         std::random_device rd{};
         std::mt19937 gen(rd());
-        std::uniform_int_distribution<uint16_t> distrib(0, 65535);
+        std::uniform_int_distribution<uint8_t> distrib(0, 255);
         return distrib(gen);
     }
 
-    std::string truncate_qname(std::vector<std::string> const& domain_parts) {
-        uint8_t i = domain_parts.back().size();
-        return std::to_string(i) + domain_parts.back();
-    }
+	struct request_state {
+		LookupState status;
+		std::vector<std::uint8_t> full_domain;
+	};
 
-    asio::ip::udp::socket socket_;
+	asio::ip::udp::socket socket_;
+	std::unordered_map<int16_t, request_state> record;
 };
 
 int main()
@@ -93,7 +130,7 @@ int main()
     dns_resolver dns(io_context, 8080);
     /*
     tcp::acceptor acceptor(io_context, tcp::endpoint(tcp::v4(), 8080));
-    packet response{};
+    std::vector<std::uint8_t> response;
     //for (;;)
     {
       tcp::socket socket(io_context);
@@ -103,7 +140,9 @@ int main()
       std::error_code ignored_error;
       size_t len = socket.read_some(asio::buffer(header), ignored_error);
 
-      response.trans_id = generate_transaction_id();
+      uint16_t trans_id = generate_transaction_id();
+      response.push_back(trans_id >> 8);
+      response.push_back(trans_id);
 
       uint16_t question_count;
       memcpy(&question_count, header + 4, sizeof(uint16_t));

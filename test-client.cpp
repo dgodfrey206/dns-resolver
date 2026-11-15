@@ -8,17 +8,16 @@ using asio::ip::udp;
 
 void send_packet(udp::socket& socket, udp::endpoint& endpoint) {
 	std::vector<std::uint8_t> buf = {
-		0x14, 0x1F, // 5151
-		1 << 7, 0,
-		0x0, 0x01,
-		0x0, 0x0,
-		0x0, 0x0,
-		0x0, 0x0,
+		0x14, 0x1F, // Transaction ID (5151)
+		0x01, 0x0, // Flags (Set: Recursion Desired)
+		0x0, 0x01, // Questions count
+		0x0, 0x0, // Answer RRs
+		0x0, 0x0, // Authority RRs
+		0x0, 0x0, // Additional RRs
 		0x6, 'g', 'o', 'o', 'g', 'l', 'e',
-		0x3, 'c', 'o', 'm',
-		0x0,
-		0x0, 0x01,
-		0x0, 0x01
+		0x3, 'c', 'o', 'm', 0x0,
+		0x0, 0x01, // Question Type (A Record)
+		0x0, 0x01 // Question Class
 	};
 	asio::const_buffer buffer = asio::buffer(buf);
 	auto len = socket.send_to(buffer, endpoint);
